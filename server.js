@@ -90,5 +90,5 @@ app.get('/api/admin/config',auth,admin,(req,res)=>res.json(Object.fromEntries(db
 app.put('/api/admin/config',auth,admin,(req,res)=>{const tx=db.transaction(obj=>{for(const [k,v] of Object.entries(obj))db.prepare('INSERT INTO app_config(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(k,String(v))});tx(req.body||{});res.json({ok:true})});
 app.post('/api/admin/announce',auth,admin,(req,res)=>{const text=(req.body.text||'').trim();if(!text)return res.status(400).json({error:'Text required'});const users=db.prepare('SELECT id FROM users WHERE banned=0').all();const tx=db.transaction(()=>{for(const u of users)notify(u.id,'announcement',text)});tx();res.json({sent:users.length})});
 
-app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
+app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'index.html')));
 app.listen(PORT,()=>console.log(`ZenSocial running on http://localhost:${PORT}`));
