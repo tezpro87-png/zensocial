@@ -18,7 +18,7 @@ fs.mkdirSync(path.join(__dirname,'uploads'),{recursive:true});
 
 app.use(express.json({limit:'2mb'}));
 app.use('/uploads',express.static(path.join(__dirname,'uploads')));
-app.use(express.static(path.join(__dirname,'public')));
+app.use(express.static(__dirname));
 
 const schema=`
 CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT UNIQUE NOT NULL,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,display_name TEXT, bio TEXT DEFAULT '',avatar TEXT DEFAULT '',role TEXT NOT NULL DEFAULT 'USER',verified INTEGER DEFAULT 0,banned INTEGER DEFAULT 0,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
