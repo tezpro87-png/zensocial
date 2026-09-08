@@ -1,42 +1,26 @@
 const $=s=>document.querySelector(s), root=$('#root');let token=localStorage.getItem('zs_token'),me=null,view='home',cache=[];
 const api=async(path,opt={})=>{opt.headers={...(opt.headers||{}),...(token?{Authorization:'Bearer '+token}:{})};if(opt.body&&typeof opt.body!=='string'){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(opt.body)}const r=await fetch('/api'+path,opt);const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Something went wrong');return d};
-function svg(n){
-const a={
-home:"<svg viewBox='0 0 24 24'><path d='M3 10.5 12 3l9 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-5v-6h-5v6h-5A1.5 1.5 0 0 1 3 19.5Z'/></svg>",
-search:"<svg viewBox='0 0 24 24'><circle cx='11' cy='11' r='7'/><path d='m16.5 16.5 4.5 4.5'/></svg>",
-reels:"<svg viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='4'/><path d='m10 8 5 4-5 4Z'/></svg>",
-create:"<svg viewBox='0 0 24 24'><path d='M12 5v14M5 12h14'/></svg>",
-message:"<svg viewBox='0 0 24 24'><rect x='3' y='5' width='18' height='14' rx='3'/><path d='m4 7 8 6 8-6'/></svg>",
-bell:"<svg viewBox='0 0 24 24'><path d='M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4'/></svg>",
-save:"<svg viewBox='0 0 24 24'><path d='M6 4h12v17l-6-3-6 3Z'/></svg>",
-user:"<svg viewBox='0 0 24 24'><circle cx='12' cy='8' r='4'/><path d='M4 21c1-4 3.7-6 8-6s7 2 8 6'/></svg>",
-settings:"<svg viewBox='0 0 24 24'><circle cx='12' cy='12' r='3'/><path d='M19 13.5 21 15l-2 3-2.4-1.1a8 8 0 0 1-2.1 1.2V21h-4v-2.9a8 8 0 0 1-2.1-1.2L6 18l-2-3 2-1.5a8 8 0 0 1 0-3L4 9l2-3 2.4 1.1A8 8 0 0 1 10.5 6V3h4v3a8 8 0 0 1 2.1 1.1L19 6l2 3-2 1.5a8 8 0 0 1 0 3Z'/></svg>",
-logout:"<svg viewBox='0 0 24 24'><path d='M10 17l5-5-5-5M15 12H3M21 4v16'/></svg>",
-admin:"<svg viewBox='0 0 24 24'><rect x='4' y='4' width='16' height='16' rx='3'/><path d='M8 9h8M8 13h5M8 17h8'/></svg>",
-spark:"<svg viewBox='0 0 24 24'><path d='m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8Z'/></svg>"
-};
-return a[n]||"";
-}
-
 function toast(t){const x=document.createElement('div');x.className='toast';x.textContent=t;document.body.append(x);setTimeout(()=>x.remove(),2200)}
 function esc(s=''){return s.replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 async function boot(){if(!token)return login();try{const d=await api('/me');me=d.user;render()}catch(e){localStorage.removeItem('zs_token');token=null;login()}}
 function login(){root.innerHTML=`<div class="auth"><div class="authbox glass"><div class="brand">✦ <span>ZenSocial</span></div><p class="muted">Premium social app • empty from day one</p><div class="tabs"><button class="tab active" id="li">Login</button><button class="tab" id="re">Register</button></div><div id="authform"></div></div></div>`;authForm('login');$('#li').onclick=()=>{authForm('login');$('#li').classList.add('active');$('#re').classList.remove('active')};$('#re').onclick=()=>{authForm('register');$('#re').classList.add('active');$('#li').classList.remove('active')}}
 function authForm(mode){$('#authform').innerHTML=mode==='login'?`<input class="input" id="email" placeholder="Email"><input class="input" id="pass" type="password" placeholder="Password"><button class="primary" style="width:100%;margin-top:10px" id="go">Login</button>`:`<input class="input" id="name" placeholder="Display name"><input class="input" id="user" placeholder="Username"><input class="input" id="email" placeholder="Email"><input class="input" id="pass" type="password" placeholder="Password (6+ chars)"><button class="primary" style="width:100%;margin-top:10px" id="go">Create account</button>`;$('#go').onclick=async()=>{try{const d=mode==='login'?await api('/auth/login',{method:'POST',body:{email:$('#email').value,password:$('#pass').value}}):await api('/auth/register',{method:'POST',body:{display_name:$('#name')?.value,username:$('#user')?.value,email:$('#email').value,password:$('#pass').value}});token=d.token;localStorage.setItem('zs_token',token);me=d.user;if(d.firstUser)toast('🎉 You are the first user — Super Admin');render()}catch(e){toast(e.message)}}}
-function nav(){
-const admin=['SUPER_ADMIN','ADMIN','MODERATOR'].includes(me.role);
-const items=[
-['home','Home','home'],['explore','Explore','search'],['reels','Reels','reels'],
-['create','Create','create'],['messages','Messages','message'],
-['notifications','Notifications','bell'],['saved','Saved','save'],
-['profile','Profile','user'],['settings','Settings','settings'],
-...(admin?[['admin','Admin Panel','admin']]:[])
-];
-return `<aside class="side">
-<div class="brand sidebrand">${svg('spark')}<span>ZenSocial</span></div>
-<div class="navgroup">${items.map(x=>`<button class="navbtn ${view===x[0]?'active':''}" onclick="go('${x[0]}')">${svg(x[2])}<span>${x[1]}</span></button>`).join('')}</div>
-<button class="navbtn logoutbtn" onclick="logout()">${svg('logout')}<span>Logout</span></button>
-</aside>`;
+function nav(){const admin=['SUPER_ADMIN','ADMIN','MODERATOR'].includes(me.role);return `<aside class="side"><div class="brand" style="padding:10px 15px">✦ ZenSocial</div>${[['home','⌂ Home'],['explore','⌕ Explore'],['reels','▶ Reels'],['create','＋ Create'],['messages','✉ Messages'],['notifications','♡ Notifications'],['saved','▣ Saved'],['profile','◉ Profile'],['settings','⚙ Settings'],...(admin?[['admin','▤ Admin Panel']]:[])].map(x=>`<button class="navbtn ${view===x[0]?'active':''}" onclick="go('${x[0]}')">${x[1]}</button>`).join('')}<button class="navbtn" onclick="logout()">⇥ Logout</button></aside>`}
+function render(){root.innerHTML=`<div class="app"><header class="top"><div class="brand">✦ <span>ZenSocial</span></div><div class="spacer"></div><button class="icon" onclick="go('explore')">⌕</button><button class="icon" onclick="go('notifications')">♡</button><button class="icon" onclick="go('profile')">◉</button></header><div class="shell">${nav()}<main class="main" id="main"></main><aside class="right"><div class="card glass"><b>Zen Mode</b><p class="muted small">Reduce distractions with one tap.</p><button class="primary" onclick="toggleZen()">${'Open Zen Controls'}</button></div></aside></div><nav class="bottom">${[['home','⌂'],['explore','⌕'],['create','＋'],['reels','▶'],['profile','◉']].map(x=>`<button onclick="go('${x[0]}')">${x[1]}</button>`).join('')}</nav></div>`;loadView()}
+window.go=async v=>{view=v;render()};window.logout=()=>{localStorage.removeItem('zs_token');token=null;me=null;login()};
+async function loadView(){try{if(view==='home')return home();if(view==='explore')return explore();if(view==='reels')return reels();if(view==='create')return create();if(view==='profile')return profile(me.id);if(view==='settings')return settings();if(view==='saved')return saved();if(view==='notifications')return notifications();if(view==='messages')return messages();if(view==='admin')return adminPanel()}catch(e){$('#main').innerHTML=`<div class="card glass"><b>Error</b><p>${esc(e.message)}</p></div>`}}
+function postCard(p){const avatar=p.user.avatar?`<img class="avatar" src="${p.user.avatar}">`:`<div class="avatar">${esc((p.user.display_name||p.user.username)[0].toUpperCase())}</div>`;let media=p.media_url?(p.media_type==='video'?`<video class="media" src="${p.media_url}" controls></video>`:`<img class="media" src="${p.media_url}">`):'';return `<article class="card glass"><div class="posthead">${avatar}<div><b>${esc(p.user.display_name||p.user.username)} ${p.user.verified?'✓':''}</b><div class="muted small">@${esc(p.user.username)}</div></div><div class="spacer"></div><button onclick="reportPost(${p.id})">•••</button></div>${media}<p>${esc(p.caption)}</p><div class="actions"><button onclick="likePost(${p.id})">${p.liked?'♥':'♡'} ${p.likes}</button><button onclick="comments(${p.id})">💬 ${p.comments}</button><button onclick="savePost(${p.id})">${p.isSaved?'▣':'□'}</button><button onclick="sharePost(${p.id})">↗</button></div></article>`}
+async function stories(){
+  const rows=await api('/stories');
+  return `<div class="stories-bar glass">
+    <button class="story-add" onclick="addStory()">
+      <span class="story-ring">+</span><small>Add Story</small>
+    </button>
+    ${rows.map(x=>`<button class="story-item" onclick="viewStory(${x.id})">
+      <span class="story-ring">${esc((x.username||'?')[0].toUpperCase())}</span>
+      <small>@${esc(x.username||'user')}</small>
+    </button>`).join('')}
+  </div>`;
 }
 
 window.addStory=async()=>{
@@ -102,110 +86,4 @@ async function settings(){const s=await api('/settings');$('#main').innerHTML=`<
 window.saveSettings=async()=>{const keys=['zen','block_reels','block_posts','block_stories','block_explore','block_comments'];const body={theme:$('#theme').value,font:$('#font').value,emoji:$('#emoji').value,location_style:$('#loc').value,glass:$('#glass').checked};keys.forEach(k=>body[k]=$('#'+k).checked?1:0);await api('/settings',{method:'PUT',body});toast('Settings saved');render()};window.toggleZen=()=>go('settings');
 async function adminPanel(){const st=await api('/admin/stats');$('#main').innerHTML=`<h2>Admin Panel</h2><div class="stat"><div><b>${st.users}</b><br>Users</div><div><b>${st.posts}</b><br>Posts</div><div><b>${st.reports}</b><br>Open reports</div></div><div class="adminnav"><button onclick="adminUsers()">Users</button><button onclick="adminReports()">Reports</button><button onclick="adminAnnounce()">Announcement</button><button onclick="adminLogs()">Audit Logs</button></div><div class="card glass"><h3>Super Admin controls</h3><p class="muted">Manage real registered users only. No seeded users/content.</p><button class="primary" onclick="adminUsers()">Manage users</button></div>`}
 window.adminUsers=async()=>{const u=await api('/admin/users');$('#main').innerHTML=`<h2>Users</h2><div class="card glass"><table class="table"><tr><th>User</th><th>Role</th><th>Status</th><th>Actions</th></tr>${u.map(x=>`<tr><td>${esc(x.username)}<br><span class="small muted">${esc(x.email)}</span></td><td>${x.role}</td><td>${x.banned?'Banned':'Active'} ${x.verified?'✓':''}</td><td><button onclick="adminVerify(${x.id},${x.verified})">${x.verified?'Unverify':'Verify'}</button> <button onclick="adminBan(${x.id},${x.banned})" class="${x.banned?'':'danger'}">${x.banned?'Unban':'Ban'}</button></td></tr>`).join('')}</table></div>`};window.adminVerify=async(id,v)=>{await api('/admin/users/'+id,{method:'PUT',body:{verified:v?0:1}});adminUsers()};window.adminBan=async(id,v)=>{await api('/admin/users/'+id,{method:'PUT',body:{banned:v?0:1}});adminUsers()};window.adminReports=async()=>{const r=await api('/admin/reports');$('#main').innerHTML=`<h2>Reports</h2>${r.map(x=>`<div class="card glass"><b>#${x.id} ${esc(x.target_type)}</b><p>${esc(x.reason)}</p><div class="muted">by @${esc(x.reporter)} • ${x.status}</div><button class="primary" onclick="resolveReport(${x.id})">Resolve</button></div>`).join('')||'<div class="card glass">No reports.</div>'}`};window.resolveReport=async id=>{await api('/admin/reports/'+id,{method:'PUT',body:{status:'RESOLVED'}});adminReports()};window.adminAnnounce=async()=>{const t=prompt('Announcement to all users');if(t){const d=await api('/admin/announce',{method:'POST',body:{text:t}});toast('Sent to '+d.sent+' users')}};window.adminLogs=async()=>{const l=await api('/admin/logs');$('#main').innerHTML=`<h2>Audit Logs</h2>${l.map(x=>`<div class="card glass"><b>${esc(x.action)}</b><div class="muted">@${esc(x.admin)} • ${x.target_type} #${x.target_id} • ${x.created_at}</div></div>`).join('')}`};
-
-<style id="premium-ui">
-svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.brand{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:-.4px}
-.brand svg{width:25px;height:25px}
-.side{display:flex!important;flex-direction:column;min-height:calc(100vh - 80px);padding:18px 12px!important}
-.sidebrand{padding:12px 14px 24px!important;font-size:20px}
-.navgroup{display:flex;flex-direction:column;gap:5px}
-.navbtn{
-display:flex!important;align-items:center;gap:14px;
-width:100%;padding:12px 15px!important;
-border:0;border-radius:15px;background:transparent;
-font-size:14px;font-weight:600;color:inherit;
-cursor:pointer;transition:.2s
-}
-.navbtn:hover{background:rgba(124,58,237,.08);transform:translateX(2px)}
-.navbtn.active{
-background:linear-gradient(135deg,rgba(124,58,237,.14),rgba(6,182,212,.10));
-box-shadow:inset 0 0 0 1px rgba(124,58,237,.10)
-}
-.navbtn.active svg{stroke-width:2.3}
-.logoutbtn{margin-top:auto;color:#ef4444}
-.icon{
-width:42px;height:42px;border-radius:14px;
-display:grid;place-items:center;
-border:1px solid rgba(127,127,127,.15);
-background:rgba(255,255,255,.35);
-backdrop-filter:blur(12px)
-}
-.icon:hover{transform:translateY(-1px)}
-.top{
-backdrop-filter:blur(20px)!important;
--webkit-backdrop-filter:blur(20px);
-box-shadow:0 1px 0 rgba(127,127,127,.10)
-}
-.card.glass{
-border:1px solid rgba(127,127,127,.12)!important;
-box-shadow:0 12px 35px rgba(0,0,0,.06)!important;
-backdrop-filter:blur(18px)
-}
-.stories-bar{
-display:flex;gap:16px;overflow-x:auto;
-padding:15px 4px 18px;margin-bottom:5px;
-scrollbar-width:none
-}
-.stories-bar::-webkit-scrollbar{display:none}
-.story-item,.story-add{
-min-width:70px;border:0;background:transparent;
-display:flex;flex-direction:column;align-items:center;
-gap:7px;color:inherit;cursor:pointer
-}
-.story-ring{
-width:64px;height:64px;border-radius:50%;
-padding:3px;display:grid;place-items:center;
-position:relative;
-background:linear-gradient(135deg,#7c3aed,#ec4899,#06b6d4)
-}
-.story-ring::after{
-content:"";position:absolute;inset:4px;
-border-radius:50%;background:var(--card,#fff);
-z-index:0
-}
-.story-ring>*{position:relative;z-index:1}
-.story-add .story-ring{
-font-size:26px;font-weight:300
-}
-.story-item small,.story-add small{
-font-size:11px;max-width:70px;
-overflow:hidden;text-overflow:ellipsis;white-space:nowrap
-}
-.story-viewer{
-position:fixed;inset:0;z-index:9999;
-display:grid;place-items:center;
-padding:20px;background:rgba(5,8,20,.84);
-backdrop-filter:blur(20px)
-}
-.story-modal{
-width:min(430px,94vw);padding:18px;
-display:flex;flex-direction:column;gap:14px;
-align-items:center;justify-content:center
-}
-.story-modal img,.story-modal video{
-max-width:100%;max-height:72vh;
-border-radius:18px;object-fit:contain
-}
-.story-close{
-position:absolute;right:20px;top:20px;
-width:42px;height:42px;border-radius:50%;
-border:1px solid rgba(255,255,255,.25);
-background:rgba(255,255,255,.12);
-color:#fff;font-size:24px;cursor:pointer
-}
-@media(max-width:700px){
-.side{display:none!important}
-.top{height:62px}
-.main{padding:14px!important}
-.bottom{
-display:flex!important;position:fixed;bottom:0;left:0;right:0;
-z-index:1000;justify-content:space-around;
-padding:10px 8px calc(10px + env(safe-area-inset-bottom));
-backdrop-filter:blur(22px)
-}
-.bottom button{border:0;background:transparent;padding:10px;color:inherit}
-.bottom svg{width:23px;height:23px}
-}
-</style>
 boot();
