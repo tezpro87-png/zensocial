@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>ZenSocial</title>
+<title>ZenSocial Pro</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
 :root {
@@ -12,135 +12,153 @@
   --text: #f5f5f5;
   --muted: #a8a8a8;
   --border: #262626;
-  --pink-gradient: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-  --blue-accent: #0095f6;
+  --accent: #0095f6;
+  --verified: #3897f0;
+  --danger: #ed4956;
 }
+body.light-theme { --bg: #ffffff; --card-bg: #f8f9fa; --text: #000000; --muted: #65676b; --border: #dbdbdb; }
+body.glass-theme { --bg: linear-gradient(135deg, #0f2027, #203a43, #2c5364); --card-bg: rgba(255, 255, 255, 0.1); --text: #ffffff; --border: rgba(255,255,255,0.2); }
 
-* { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
-body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100vh; padding-bottom: 60px; }
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+body { background: var(--bg); color: var(--text); padding-bottom: 60px; min-height: 100vh; }
 
-/* Top Header */
 .top-nav { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--border); height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; }
-.brand-logo { font-size: 22px; font-weight: 700; font-family: 'Grand Hotel', cursive, sans-serif; letter-spacing: 0.5px; background: linear-gradient(45deg, #fff, #ddd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.header-actions { display: flex; gap: 20px; font-size: 20px; align-items: center; }
-.header-actions i { color: var(--text); cursor: pointer; }
+.brand-logo { font-size: 20px; font-weight: 800; }
+.page-section { display: none; padding: 12px; max-width: 500px; margin: 0 auto; }
+.page-section.active { display: block; }
 
-/* Stories Section */
-.stories-container { display: flex; gap: 14px; padding: 12px 16px; overflow-x: auto; border-bottom: 1px solid var(--border); scrollbar-width: none; }
-.stories-container::-webkit-scrollbar { display: none; }
-.story-item { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 68px; flex-shrink: 0; }
-.story-ring { width: 64px; height: 64px; border-radius: 50%; padding: 2px; background: var(--pink-gradient); display: flex; align-items: center; justify-content: center; }
-.story-ring.my-story { background: var(--border); position: relative; }
-.story-avatar { width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--bg); object-fit: cover; background: #333; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #fff; }
-.add-story-plus { position: absolute; bottom: 2px; right: 2px; background: var(--blue-accent); color: white; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 11px; border: 2px solid var(--bg); }
-.story-username { font-size: 11px; color: var(--text); max-width: 65px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-card { background: var(--card-bg); border: 1px solid var(--border); padding: 12px; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+.user-actions button { padding: 6px 10px; border: none; border-radius: 4px; font-weight: 600; font-size: 11px; cursor: pointer; margin-left: 2px; }
+.btn-verify { background: var(--verified); color: white; }
+.btn-ban { background: var(--danger); color: white; }
+.btn-manager { background: #9c27b0; color: white; }
 
-/* Main Content Wrapper */
-.feed-container { max-width: 470px; margin: 0 auto; padding-top: 8px; }
+.post-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+.post-header { padding: 10px; display: flex; align-items: center; justify-content: space-between; }
+.verified-icon { color: var(--verified); font-size: 12px; margin-left: 4px; }
+.post-media { width: 100%; max-height: 450px; object-fit: cover; display: block; }
 
-/* Feed Post UI */
-.post-card { background: var(--bg); border-bottom: 1px solid var(--border); margin-bottom: 12px; }
-.post-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; }
-.post-user { display: flex; align-items: center; gap: 10px; }
-.post-user-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--pink-gradient); padding: 1.5px; }
-.post-user-avatar img, .post-user-avatar div { width: 100%; height: 100%; border-radius: 50%; border: 1px solid var(--bg); object-fit: cover; background: #333; display: flex; align-items: center; justify-content: center; font-size: 12px; }
-.post-user-name { font-size: 13px; font-weight: 600; }
-.post-media { width: 100%; max-height: 500px; object-fit: cover; background: #111; }
-.post-actions { display: flex; justify-content: space-between; padding: 10px 12px; font-size: 20px; }
-.post-actions-left { display: flex; gap: 16px; }
-.post-likes { font-size: 13px; font-weight: 600; padding: 0 12px 4px; }
-.post-caption { font-size: 13px; padding: 0 12px 10px; line-height: 1.4; }
-.post-caption span { font-weight: 600; margin-right: 6px; }
+.setting-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.setting-input { width: 100%; padding: 10px; margin: 8px 0; background: var(--card-bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; }
 
-/* Bottom Tab Navigation Bar */
 .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; height: 50px; background: var(--bg); border-top: 1px solid var(--border); display: flex; justify-content: space-around; align-items: center; z-index: 100; }
-.tab-btn { background: none; border: none; color: var(--text); font-size: 22px; cursor: pointer; flex: 1; text-align: center; height: 100%; display: flex; align-items: center; justify-content: center; }
-.tab-btn.active { color: #fff; }
-
-/* Real Modal UI replacing browser alerts */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 200; padding: 16px; }
-.modal-overlay.active { display: flex; }
-.modal-box { background: var(--card-bg); border-radius: 12px; width: 100%; max-width: 360px; padding: 20px; border: 1px solid var(--border); }
-.modal-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; text-align: center; }
-.modal-input { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); background: #000; color: #fff; outline: none; margin-bottom: 14px; font-size: 14px; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
-.modal-btn { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 13px; }
-.btn-cancel { background: transparent; color: var(--muted); }
-.btn-confirm { background: var(--blue-accent); color: white; }
+.tab-btn { background: none; border: none; color: var(--text); font-size: 20px; cursor: pointer; }
 </style>
 </head>
 <body>
 
-<!-- Header -->
 <div class="top-nav">
   <div class="brand-logo">ZenSocial</div>
-  <div class="header-actions">
-    <i class="fa-regular fa-heart" id="notiBtn"></i>
-    <i class="fa-regular fa-paper-plane" id="dmBtn"></i>
+  <div style="display:flex; gap:16px; align-items:center;">
+    <i class="fa-solid fa-crown" onclick="switchTab('adminSection')" style="color:#ffd700; cursor:pointer;"></i>
+    <i class="fa-regular fa-paper-plane" onclick="switchTab('dmSection')"></i>
   </div>
 </div>
 
-<!-- Stories -->
-<div class="stories-container">
-  <div class="story-item">
-    <div class="story-ring my-story">
-      <div class="story-avatar">H</div>
-      <div class="add-story-plus"><i class="fa-solid fa-plus"></i></div>
-    </div>
-    <div class="story-username">Your story</div>
+<!-- 1. FEED -->
+<div class="page-section active" id="feedSection"><div id="feedContainer"></div></div>
+
+<!-- 2. SEARCH & USER PROFILE SEARCH -->
+<div class="page-section" id="searchSection">
+  <input type="text" class="setting-input" placeholder="Search friends & accounts..." id="searchInput">
+</div>
+
+<!-- 3. UPLOAD MEDIA -->
+<div class="page-section" id="createSection">
+  <h3>Create Post / Reel</h3>
+  <input type="text" class="setting-input" id="mediaUrl" placeholder="Image/Video URL...">
+  <input type="text" class="setting-input" id="postCaption" placeholder="Caption...">
+  <button style="width:100%; padding:10px; background:var(--accent); border:none; color:white; border-radius:6px;" onclick="alert('Post Published!')">Publish</button>
+</div>
+
+<!-- 4. ADMIN PANEL -->
+<div class="page-section" id="adminSection">
+  <h3><i class="fa-solid fa-user-shield"></i> Admin Management</h3>
+  <div id="adminUserList" style="margin-top:12px;"></div>
+</div>
+
+<!-- 5. SETTINGS & GHOST MODE -->
+<div class="page-section" id="settingsSection">
+  <h3>Account Settings</h3>
+  <input type="text" class="setting-input" placeholder="Change Username">
+  <input type="password" class="setting-input" placeholder="Change Password">
+  <button style="width:100%; padding:8px; background:var(--accent); border:none; color:white; border-radius:6px; margin-bottom:12px;">Save Profile</button>
+
+  <div class="setting-item">
+    <span>Ghost Mode (Hide Online)</span>
+    <input type="checkbox" onchange="alert('Ghost Mode updated!')">
+  </div>
+  <div class="setting-item">
+    <span>Theme</span>
+    <select onchange="document.body.className=this.value+' -theme'" class="setting-input" style="width:auto;">
+      <option value="dark">Dark</option>
+      <option value="light">Light</option>
+      <option value="glass">Glassmorphism</option>
+    </select>
   </div>
 </div>
 
-<!-- Main Feed -->
-<div class="feed-container" id="feedArea">
-  <div style="text-align:center; padding: 40px 10px; color: var(--muted);">
-    <i class="fa-solid fa-spinner fa-spin" style="font-size:24px; margin-bottom:10px;"></i>
-    <div>Loading Feed...</div>
-  </div>
-</div>
-
-<!-- Instagram Bottom Navigation Bar -->
 <div class="bottom-bar">
-  <button class="tab-btn active"><i class="fa-solid fa-house"></i></button>
-  <button class="tab-btn" id="searchTab"><i class="fa-solid fa-magnifying-glass"></i></button>
-  <button class="tab-btn" id="createTab"><i class="fa-regular fa-square-plus"></i></button>
-  <button class="tab-btn"><i class="fa-solid fa-film"></i></button>
-  <button class="tab-btn"><i class="fa-regular fa-user"></i></button>
+  <button class="tab-btn" onclick="switchTab('feedSection')"><i class="fa-solid fa-house"></i></button>
+  <button class="tab-btn" onclick="switchTab('searchSection')"><i class="fa-solid fa-magnifying-glass"></i></button>
+  <button class="tab-btn" onclick="switchTab('createSection')"><i class="fa-regular fa-square-plus"></i></button>
+  <button class="tab-btn" onclick="switchTab('adminSection')"><i class="fa-solid fa-user-gear"></i></button>
+  <button class="tab-btn" onclick="switchTab('settingsSection')"><i class="fa-regular fa-gear"></i></button>
 </div>
 
-<!-- Custom Popup Modal -->
-<div class="modal-overlay" id="customModal">
-  <div class="modal-box">
-    <div class="modal-title" id="modalTitle">Search Users</div>
-    <input type="text" class="modal-input" id="modalInput" placeholder="Enter username...">
-    <div class="modal-actions">
-      <button class="modal-btn btn-cancel" onclick="closeModal()">Cancel</button>
-      <button class="modal-btn btn-confirm" id="modalConfirmBtn">Search</button>
-    </div>
-  </div>
-</div>
-
-<script src="app.js"></script>
 <script>
-function openModal(title, placeholder, onConfirm) {
-  document.getElementById('modalTitle').innerText = title;
-  const input = document.getElementById('modalInput');
-  input.placeholder = placeholder;
-  input.value = '';
-  document.getElementById('customModal').classList.add('active');
-  document.getElementById('modalConfirmBtn').onclick = () => {
-    onConfirm(input.value);
-    closeModal();
-  };
+function switchTab(id) {
+  document.querySelectorAll('.page-section').forEach(e => e.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id === 'adminSection') loadAdminPanel();
+  if(id === 'feedSection') loadFeed();
 }
-function closeModal() {
-  document.getElementById('customModal').classList.remove('active');
+
+async function loadFeed() {
+  const res = await fetch('/api/posts');
+  const posts = await res.json();
+  document.getElementById('feedContainer').innerHTML = posts.map(p => `
+    <div class="post-card">
+      <div class="post-header">
+        <div><b>${p.username}</b>${p.isVerified ? '<i class="fa-solid fa-circle-check verified-icon"></i>' : ''}</div>
+      </div>
+      <img src="${p.mediaUrl}" class="post-media">
+      <div style="padding:10px;">
+        <i class="fa-regular fa-heart" style="font-size:20px;"></i>
+        <p style="margin-top:4px; font-size:13px;"><b>${p.username}</b> ${p.caption}</p>
+      </div>
+    </div>
+  `).join('');
 }
-document.getElementById('searchTab').addEventListener('click', () => {
-  openModal('Search Users', 'Type username or leave empty for all...', (val) => {
-    console.log('Searching:', val);
+
+async function loadAdminPanel() {
+  const res = await fetch('/api/users');
+  const users = await res.json();
+  document.getElementById('adminUserList').innerHTML = users.map(u => `
+    <div class="user-card">
+      <div>
+        <b>${u.username}</b> ${u.isVerified ? '<i class="fa-solid fa-circle-check verified-icon"></i>' : ''}
+        <div style="font-size:11px; color:var(--muted);">${u.role.toUpperCase()} | ${u.isBanned ? 'Banned' : 'Active'}</div>
+      </div>
+      <div class="user-actions">
+        <button class="btn-verify" onclick="adminAction('${u.username}', 'verify', ${!u.isVerified})">${u.isVerified ? 'Unverify' : 'Verify'}</button>
+        <button class="btn-manager" onclick="adminAction('${u.username}', 'role', '${u.role === 'manager' ? 'user' : 'manager'}')">Manager</button>
+        <button class="btn-ban" onclick="adminAction('${u.username}', 'ban', ${!u.isBanned})">${u.isBanned ? 'Unban' : 'Ban'}</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function adminAction(targetUsername, action, value) {
+  await fetch('/api/admin/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetUsername, action, value })
   });
-});
+  loadAdminPanel();
+}
+
+loadFeed();
 </script>
 </body>
 </html>
