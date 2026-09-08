@@ -10,7 +10,65 @@ function render(){root.innerHTML=`<div class="app"><header class="top"><div clas
 window.go=async v=>{view=v;render()};window.logout=()=>{localStorage.removeItem('zs_token');token=null;me=null;login()};
 async function loadView(){try{if(view==='home')return home();if(view==='explore')return explore();if(view==='reels')return reels();if(view==='create')return create();if(view==='profile')return profile(me.id);if(view==='settings')return settings();if(view==='saved')return saved();if(view==='notifications')return notifications();if(view==='messages')return messages();if(view==='admin')return adminPanel()}catch(e){$('#main').innerHTML=`<div class="card glass"><b>Error</b><p>${esc(e.message)}</p></div>`}}
 function postCard(p){const avatar=p.user.avatar?`<img class="avatar" src="${p.user.avatar}">`:`<div class="avatar">${esc((p.user.display_name||p.user.username)[0].toUpperCase())}</div>`;let media=p.media_url?(p.media_type==='video'?`<video class="media" src="${p.media_url}" controls></video>`:`<img class="media" src="${p.media_url}">`):'';return `<article class="card glass"><div class="posthead">${avatar}<div><b>${esc(p.user.display_name||p.user.username)} ${p.user.verified?'✓':''}</b><div class="muted small">@${esc(p.user.username)}</div></div><div class="spacer"></div><button onclick="reportPost(${p.id})">•••</button></div>${media}<p>${esc(p.caption)}</p><div class="actions"><button onclick="likePost(${p.id})">${p.liked?'♥':'♡'} ${p.likes}</button><button onclick="comments(${p.id})">💬 ${p.comments}</button><button onclick="savePost(${p.id})">${p.isSaved?'▣':'□'}</button><button onclick="sharePost(${p.id})">↗</button></div></article>`}
-async function home(){const rows=await api('/feed');$('#main').innerHTML=`<div class="between"><div><h2>Home</h2><p class="muted">Your feed</p></div><button class="primary" onclick="go('create')">＋ Create</button></div>${rows.length?rows.map(postCard).join(''):`<div class="card glass" style="text-align:center;padding:45px 20px"><div style="font-size:45px">◌</div><h3>Your feed is empty</h3><p class="muted">Follow people to see their posts. There are no pre-created users or posts.</p><button class="primary" onclick="go('explore')">Find People</button></div>`}`}
+async function stories(){
+  const rows=await api('/stories');
+  return `<div class="stories-bar glass">
+    <button class="story-add" onclick="addStory()">
+      <span class="story-ring">+</span><small>Add Story</small>
+    </button>
+    ${rows.map(x=>`<button class="story-item" onclick="viewStory(${x.id})">
+      <span class="story-ring">${esc((x.username||'?')[0].toUpperCase())}</span>
+      <small>@${esc(x.username||'user')}</small>
+    </button>`).join('')}
+  </div>`;
+}
+
+window.addStory=async()=>{
+  const input=document.createElement('input');
+  input.type='file';
+  input.accept='image/*,video/*';
+  input.onchange=async()=>{
+    const f=input.files[0];
+    if(!f)return;
+    try{
+      const fd=new FormData();
+      fd.append('media',f);
+      const r=await fetch('/api/upload',{
+        method:'POST',
+        headers:{Authorization:'Bearer '+token},
+        body:fd
+      });
+      const d=await r.json();
+      if(!r.ok)throw Error(d.error||'Upload failed');
+      await api('/stories',{
+        method:'POST',
+        body:{media_url:d.url,media_type:d.type}
+      });
+      toast('Story added');
+      loadView();
+    }catch(e){toast(e.message)}
+  };
+  input.click();
+};
+
+window.viewStory=async id=>{
+  const rows=await api('/stories');
+  const x=rows.find(s=>s.id===id);
+  if(!x)return;
+  const media=x.media_type==='video'
+    ? `<video src="${x.media_url}" controls autoplay style="max-width:100%;max-height:70vh;border-radius:18px"></video>`
+    : `<img src="${x.media_url}" style="max-width:100%;max-height:70vh;object-fit:contain;border-radius:18px">`;
+  const box=document.createElement('div');
+  box.className='story-viewer';
+  box.innerHTML=`<div class="story-modal glass">
+    <button class="story-close" onclick="this.closest('.story-viewer').remove()">×</button>
+    <div class="muted">@${esc(x.username||'user')}</div>
+    ${media}
+  </div>`;
+  document.body.append(box);
+};
+
+async function home(){const storyBar=await stories();const rows=await api('/feed');$('#main').innerHTML=storyBar+`<div class="between"><div><h2>Home</h2><p class="muted">Your feed</p></div><button class="primary" onclick="go('create')">＋ Create</button></div>${rows.length?rows.map(postCard).join(''):`<div class="card glass" style="text-align:center;padding:45px 20px"><div style="font-size:45px">◌</div><h3>Your feed is empty</h3><p class="muted">Follow people to see their posts. There are no pre-created users or posts.</p><button class="primary" onclick="go('explore')">Find People</button></div>`}`}
 async function explore(){const q=prompt('Search users (leave blank for latest posts):')||'';if(q){const u=await api('/users?q='+encodeURIComponent(q));$('#main').innerHTML=`<h2>Search</h2>${u.map(x=>`<div class="card glass between"><div class="row"><div class="avatar">${esc((x.display_name||x.username)[0])}</div><div><b>${esc(x.display_name)}</b><div class="muted">@${esc(x.username)} • ${x.followers} followers</div></div></div><button class="primary" onclick="follow(${x.id},this)">Follow</button></div>`).join('')||'<p class="muted">No users found.</p>'}`;return}const rows=await api('/explore');$('#main').innerHTML=`<h2>Explore</h2>${rows.map(postCard).join('')||'<div class="card glass"><p class="muted">Nothing here yet.</p></div>'}`}
 async function reels(){const rows=await api('/reels');$('#main').innerHTML=`<h2>Reels</h2>${rows.map(postCard).join('')||'<div class="card glass"><p class="muted">No reels yet.</p></div>'}`}
 function create(){ $('#main').innerHTML=`<h2>Create</h2><div class="card glass"><textarea class="input" id="cap" rows="4" placeholder="Write a caption..."></textarea><input class="input" id="file" type="file" accept="image/*,video/*"><button class="primary" onclick="publish()">Publish</button></div>`}
