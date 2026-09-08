@@ -1,0 +1,96 @@
+import express from 'express';
+import path from 'path';
+import fs from 'fs';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import Database from 'better-sqlite3';
+import { fileURLToPath } from 'url';
+
+const __dirname=path.dirname(fileURLToPath(import.meta.url));
+const app=express();
+const PORT=process.env.PORT||3000;
+const JWT_SECRET=process.env.JWT_SECRET||'change-this-secret-in-production';
+const db=new Database(path.join(__dirname,'zensocial.db'));
+db.pragma('journal_mode=WAL');
+db.pragma('foreign_keys=ON');
+fs.mkdirSync(path.join(__dirname,'uploads'),{recursive:true});
+
+app.use(express.json({limit:'2mb'}));
+app.use('/uploads',express.static(path.join(__dirname,'uploads')));
+app.use(express.static(__dirname));
+
+const schema=`
+CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT UNIQUE NOT NULL,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,display_name TEXT, bio TEXT DEFAULT '',avatar TEXT DEFAULT '',role TEXT NOT NULL DEFAULT 'USER',verified INTEGER DEFAULT 0,banned INTEGER DEFAULT 0,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS follows(follower_id INTEGER,following_id INTEGER,PRIMARY KEY(follower_id,following_id),FOREIGN KEY(follower_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(following_id) REFERENCES users(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS posts(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,caption TEXT DEFAULT '',media_url TEXT DEFAULT '',media_type TEXT DEFAULT 'image',created_at TEXT DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS likes(user_id INTEGER,post_id INTEGER,PRIMARY KEY(user_id,post_id),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS comments(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,post_id INTEGER,text TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS saved(user_id INTEGER,post_id INTEGER,PRIMARY KEY(user_id,post_id),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS notifications(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,type TEXT,text TEXT,read INTEGER DEFAULT 0,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,sender_id INTEGER,receiver_id INTEGER,text TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(receiver_id) REFERENCES users(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS reports(id INTEGER PRIMARY KEY AUTOINCREMENT,reporter_id INTEGER,target_type TEXT,target_id INTEGER,reason TEXT,status TEXT DEFAULT 'OPEN',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS settings(user_id INTEGER PRIMARY KEY,theme TEXT DEFAULT 'light',glass INTEGER DEFAULT 1,font TEXT DEFAULT 'Inter',emoji TEXT DEFAULT 'Default',location_style TEXT DEFAULT 'Default',zen INTEGER DEFAULT 0,block_reels INTEGER DEFAULT 0,block_posts INTEGER DEFAULT 0,block_stories INTEGER DEFAULT 0,block_explore INTEGER DEFAULT 0,block_comments INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS stories(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,media_url TEXT,expires_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS admin_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,admin_id INTEGER,action TEXT,target_type TEXT,target_id INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS app_config(key TEXT PRIMARY KEY,value TEXT);
+`;
+db.exec(schema);
+
+const upload=multer({storage:multer.diskStorage({destination:path.join(__dirname,'uploads'),filename:(req,file,cb)=>{const ext=path.extname(file.originalname).toLowerCase();cb(null,Date.now()+'-'+Math.random().toString(36).slice(2)+ext)}}),limits:{fileSize:25*1024*1024}});
+
+function tokenFor(u){return jwt.sign({id:u.id},JWT_SECRET,{expiresIn:'30d'})}
+function auth(req,res,next){try{const h=req.headers.authorization||'';if(!h.startsWith('Bearer '))return res.status(401).json({error:'Login required'});const p=jwt.verify(h.slice(7),JWT_SECRET);const u=db.prepare('SELECT * FROM users WHERE id=?').get(p.id);if(!u||u.banned)return res.status(403).json({error:'Account unavailable'});req.user=u;next()}catch(e){res.status(401).json({error:'Invalid session'})}}
+function admin(req,res,next){if(!['SUPER_ADMIN','ADMIN','MODERATOR'].includes(req.user.role))return res.status(403).json({error:'Admin only'});next()}
+function notify(userId,type,text){db.prepare('INSERT INTO notifications(user_id,type,text) VALUES(?,?,?)').run(userId,type,text)}
+function userOut(u){const followers=db.prepare('SELECT COUNT(*) c FROM follows WHERE following_id=?').get(u.id).c;const following=db.prepare('SELECT COUNT(*) c FROM follows WHERE follower_id=?').get(u.id).c;const posts=db.prepare('SELECT COUNT(*) c FROM posts WHERE user_id=?').get(u.id).c;return {id:u.id,username:u.username,email:u.email,display_name:u.display_name,bio:u.bio,avatar:u.avatar,role:u.role,verified:!!u.verified,followers,following,posts,created_at:u.created_at}}
+function postOut(p,viewerId){const likes=db.prepare('SELECT COUNT(*) c FROM likes WHERE post_id=?').get(p.id).c;const comments=db.prepare('SELECT COUNT(*) c FROM comments WHERE post_id=?').get(p.id).c;const liked=!!db.prepare('SELECT 1 FROM likes WHERE post_id=? AND user_id=?').get(p.id,viewerId);const isSaved=!!db.prepare('SELECT 1 FROM saved WHERE post_id=? AND user_id=?').get(p.id,viewerId);const u=db.prepare('SELECT id,username,display_name,avatar,verified FROM users WHERE id=?').get(p.user_id);return {...p,likes,comments,liked,isSaved,user:u}}
+
+app.post('/api/auth/register',async(req,res)=>{const {username,email,password,display_name}=req.body||{};if(!username||!email||!password||password.length<6)return res.status(400).json({error:'Username, email and 6+ character password required'});try{const count=db.prepare('SELECT COUNT(*) c FROM users').get().c;const role=email.trim().toLowerCase()==='hasanfam319@gmail.com'?'SUPER_ADMIN':'USER';const hash=await bcrypt.hash(password,10);const info=db.prepare('INSERT INTO users(username,email,password_hash,display_name,role) VALUES(?,?,?,?,?)').run(username.trim(),email.trim().toLowerCase(),hash,display_name||username,role);db.prepare('INSERT INTO settings(user_id) VALUES(?)').run(info.lastInsertRowid);const u=db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid);res.json({token:tokenFor(u),user:userOut(u),firstUser:role==='SUPER_ADMIN'})}catch(e){res.status(400).json({error:e.message.includes('UNIQUE')?'Username or email already exists':'Registration failed'})}});
+app.post('/api/auth/login',async(req,res)=>{const {email,password}=req.body||{};const u=db.prepare('SELECT * FROM users WHERE email=?').get((email||'').toLowerCase());if(!u||!(await bcrypt.compare(password||'',u.password_hash)))return res.status(401).json({error:'Wrong email or password'});if(u.banned)return res.status(403).json({error:'Account banned'});res.json({token:tokenFor(u),user:userOut(u)})});
+app.get('/api/me',auth,(req,res)=>res.json({user:userOut(req.user),settings:db.prepare('SELECT * FROM settings WHERE user_id=?').get(req.user.id)}));
+
+app.get('/api/users',auth,(req,res)=>{const q=(req.query.q||'').trim();const rows=q?db.prepare("SELECT * FROM users WHERE banned=0 AND (username LIKE ? OR display_name LIKE ?) ORDER BY username LIMIT 50").all('%'+q+'%','%'+q+'%'):db.prepare('SELECT * FROM users WHERE banned=0 ORDER BY id DESC LIMIT 50').all();res.json(rows.map(u=>userOut(u)))});
+app.get('/api/users/:id',auth,(req,res)=>{const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);if(!u)return res.status(404).json({error:'User not found'});res.json(userOut(u))});
+app.post('/api/users/:id/follow',auth,(req,res)=>{const id=+req.params.id;if(id===req.user.id)return res.status(400).json({error:'Cannot follow yourself'});const exists=db.prepare('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?').get(req.user.id,id);if(exists){db.prepare('DELETE FROM follows WHERE follower_id=? AND following_id=?').run(req.user.id,id);res.json({following:false})}else{db.prepare('INSERT OR IGNORE INTO follows VALUES(?,?)').run(req.user.id,id);notify(id,'follow',`${req.user.username} started following you`);res.json({following:true})}});
+
+app.post('/api/upload',auth,upload.single('media'),(req,res)=>{if(!req.file)return res.status(400).json({error:'File required'});res.json({url:'/uploads/'+req.file.filename,type:req.file.mimetype.startsWith('video')?'video':'image'})});
+app.post('/api/posts',auth,(req,res)=>{const {caption='',media_url='',media_type='image'}=req.body||{};const info=db.prepare('INSERT INTO posts(user_id,caption,media_url,media_type) VALUES(?,?,?,?)').run(req.user.id,caption,media_url,media_type);res.json(postOut(db.prepare('SELECT * FROM posts WHERE id=?').get(info.lastInsertRowid),req.user.id))});
+app.get('/api/feed',auth,(req,res)=>{const s=db.prepare('SELECT following_id FROM follows WHERE follower_id=?').all(req.user.id).map(x=>x.following_id);s.push(req.user.id);const ph=s.map(()=>'?').join(',');let rows=db.prepare(`SELECT * FROM posts WHERE user_id IN (${ph}) ORDER BY id DESC LIMIT 100`).all(...s);res.json(rows.map(p=>postOut(p,req.user.id)))});
+app.get('/api/explore',auth,(req,res)=>{const rows=db.prepare('SELECT * FROM posts ORDER BY id DESC LIMIT 100').all();res.json(rows.map(p=>postOut(p,req.user.id)))});
+app.post('/api/stories',auth,(req,res)=>{const {media_url=''}=req.body||{};if(!media_url)return res.status(400).json({error:'Media required'});const expires=new Date(Date.now()+86400000).toISOString();const info=db.prepare('INSERT INTO stories(user_id,media_url,expires_at) VALUES(?,?,?)').run(req.user.id,media_url,expires);res.json({id:info.lastInsertRowid,media_url,expires_at:expires})});
+app.get('/api/stories',auth,(req,res)=>{const rows=db.prepare("SELECT s.*,u.username,u.display_name,u.avatar FROM stories s JOIN users u ON u.id=s.user_id WHERE s.expires_at>datetime('now') ORDER BY s.id DESC").all();res.json(rows)});
+app.get('/api/reels',auth,(req,res)=>{const rows=db.prepare("SELECT * FROM posts WHERE media_type='video' ORDER BY id DESC LIMIT 100").all();res.json(rows.map(p=>postOut(p,req.user.id)))});
+app.delete('/api/posts/:id',auth,(req,res)=>{const p=db.prepare('SELECT * FROM posts WHERE id=?').get(req.params.id);if(!p)return res.status(404).json({error:'Not found'});if(p.user_id!==req.user.id&&!['SUPER_ADMIN','ADMIN','MODERATOR'].includes(req.user.role))return res.status(403).json({error:'Not allowed'});db.prepare('DELETE FROM posts WHERE id=?').run(p.id);res.json({ok:true})});
+app.post('/api/posts/:id/like',auth,(req,res)=>{const id=+req.params.id;const x=db.prepare('SELECT 1 FROM likes WHERE user_id=? AND post_id=?').get(req.user.id,id);if(x)db.prepare('DELETE FROM likes WHERE user_id=? AND post_id=?').run(req.user.id,id);else{db.prepare('INSERT OR IGNORE INTO likes VALUES(?,?)').run(req.user.id,id);const p=db.prepare('SELECT user_id FROM posts WHERE id=?').get(id);if(p&&p.user_id!==req.user.id)notify(p.user_id,'like',`${req.user.username} liked your post`)}res.json({liked:!x})});
+app.post('/api/posts/:id/save',auth,(req,res)=>{const id=+req.params.id;const x=db.prepare('SELECT 1 FROM saved WHERE user_id=? AND post_id=?').get(req.user.id,id);if(x)db.prepare('DELETE FROM saved WHERE user_id=? AND post_id=?').run(req.user.id,id);else db.prepare('INSERT OR IGNORE INTO saved VALUES(?,?)').run(req.user.id,id);res.json({saved:!x})});
+app.get('/api/saved',auth,(req,res)=>{const rows=db.prepare('SELECT p.* FROM posts p JOIN saved s ON s.post_id=p.id WHERE s.user_id=? ORDER BY p.id DESC').all(req.user.id);res.json(rows.map(p=>postOut(p,req.user.id)))});
+app.get('/api/posts/:id/comments',auth,(req,res)=>{res.json(db.prepare('SELECT c.*,u.username,u.display_name,u.avatar FROM comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? ORDER BY c.id ASC').all(req.params.id))});
+app.post('/api/posts/:id/comments',auth,(req,res)=>{const text=(req.body.text||'').trim();if(!text)return res.status(400).json({error:'Comment required'});const info=db.prepare('INSERT INTO comments(user_id,post_id,text) VALUES(?,?,?)').run(req.user.id,req.params.id,text);const p=db.prepare('SELECT user_id FROM posts WHERE id=?').get(req.params.id);if(p&&p.user_id!==req.user.id)notify(p.user_id,'comment',`${req.user.username} commented on your post`);res.json(db.prepare('SELECT c.*,u.username,u.display_name,u.avatar FROM comments c JOIN users u ON u.id=c.user_id WHERE c.id=?').get(info.lastInsertRowid))});
+
+app.get('/api/profile/:id/posts',auth,(req,res)=>res.json(db.prepare('SELECT * FROM posts WHERE user_id=? ORDER BY id DESC').all(req.params.id).map(p=>postOut(p,req.user.id))));
+app.put('/api/profile',auth,(req,res)=>{const {display_name,bio,avatar}=req.body||{};db.prepare('UPDATE users SET display_name=COALESCE(?,display_name),bio=COALESCE(?,bio),avatar=COALESCE(?,avatar) WHERE id=?').run(display_name,bio,avatar,req.user.id);res.json(userOut(db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id)))});
+app.get('/api/notifications',auth,(req,res)=>res.json(db.prepare('SELECT * FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 100').all(req.user.id)));
+app.post('/api/notifications/read',auth,(req,res)=>{db.prepare('UPDATE notifications SET read=1 WHERE user_id=?').run(req.user.id);res.json({ok:true})});
+
+app.get('/api/messages/:id',auth,(req,res)=>res.json(db.prepare('SELECT m.*,u.username,u.display_name,u.avatar FROM messages m JOIN users u ON u.id=m.sender_id WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?) ORDER BY m.id ASC').all(req.user.id,req.params.id,req.params.id,req.user.id)));
+app.post('/api/messages/:id',auth,(req,res)=>{const text=(req.body.text||'').trim();if(!text)return res.status(400).json({error:'Message required'});const info=db.prepare('INSERT INTO messages(sender_id,receiver_id,text) VALUES(?,?,?)').run(req.user.id,req.params.id,text);notify(+req.params.id,'message',`${req.user.username} sent you a message`);res.json(db.prepare('SELECT * FROM messages WHERE id=?').get(info.lastInsertRowid))});
+
+app.get('/api/settings',auth,(req,res)=>res.json(db.prepare('SELECT * FROM settings WHERE user_id=?').get(req.user.id)));
+app.put('/api/settings',auth,(req,res)=>{const s=req.body||{};const keys=['theme','glass','font','emoji','location_style','zen','block_reels','block_posts','block_stories','block_explore','block_comments'];const current=db.prepare('SELECT * FROM settings WHERE user_id=?').get(req.user.id);const vals=keys.map(k=>s[k]===undefined?current[k]:s[k]);db.prepare(`UPDATE settings SET ${keys.map(k=>k+'=?').join(',')} WHERE user_id=?`).run(...vals,req.user.id);res.json(db.prepare('SELECT * FROM settings WHERE user_id=?').get(req.user.id))});
+
+app.post('/api/reports',auth,(req,res)=>{const {target_type,target_id,reason}=req.body||{};if(!reason)return res.status(400).json({error:'Reason required'});db.prepare('INSERT INTO reports(reporter_id,target_type,target_id,reason) VALUES(?,?,?,?)').run(req.user.id,target_type,target_id,reason);res.json({ok:true})});
+
+app.get('/api/admin/stats',auth,admin,(req,res)=>res.json({users:db.prepare('SELECT COUNT(*) c FROM users').get().c,posts:db.prepare('SELECT COUNT(*) c FROM posts').get().c,reports:db.prepare("SELECT COUNT(*) c FROM reports WHERE status='OPEN'").get().c,comments:db.prepare('SELECT COUNT(*) c FROM comments').get().c,likes:db.prepare('SELECT COUNT(*) c FROM likes').get().c}));
+app.get('/api/admin/users',auth,admin,(req,res)=>res.json(db.prepare('SELECT id,username,email,display_name,role,verified,banned,created_at FROM users ORDER BY id DESC').all()));
+app.put('/api/admin/users/:id',auth,admin,(req,res)=>{const {role,verified,banned}=req.body||{};if(+req.params.id===req.user.id&&banned) return res.status(400).json({error:'Cannot ban yourself'});db.prepare('UPDATE users SET role=COALESCE(?,role),verified=COALESCE(?,verified),banned=COALESCE(?,banned) WHERE id=?').run(role,verified,banned,req.params.id);db.prepare('INSERT INTO admin_logs(admin_id,action,target_type,target_id) VALUES(?,?,?,?)').run(req.user.id,'update_user','user',req.params.id);res.json({ok:true})});
+app.delete('/api/admin/posts/:id',auth,admin,(req,res)=>{db.prepare('DELETE FROM posts WHERE id=?').run(req.params.id);res.json({ok:true})});
+app.get('/api/admin/reports',auth,admin,(req,res)=>res.json(db.prepare('SELECT r.*,u.username reporter FROM reports r JOIN users u ON u.id=r.reporter_id ORDER BY r.id DESC').all()));
+app.put('/api/admin/reports/:id',auth,admin,(req,res)=>{db.prepare('UPDATE reports SET status=? WHERE id=?').run(req.body.status||'RESOLVED',req.params.id);res.json({ok:true})});
+app.get('/api/admin/logs',auth,admin,(req,res)=>res.json(db.prepare('SELECT l.*,u.username admin FROM admin_logs l JOIN users u ON u.id=l.admin_id ORDER BY l.id DESC LIMIT 200').all()));
+app.get('/api/admin/config',auth,admin,(req,res)=>res.json(Object.fromEntries(db.prepare('SELECT key,value FROM app_config').all().map(x=>[x.key,x.value]))));
+app.put('/api/admin/config',auth,admin,(req,res)=>{const tx=db.transaction(obj=>{for(const [k,v] of Object.entries(obj))db.prepare('INSERT INTO app_config(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(k,String(v))});tx(req.body||{});res.json({ok:true})});
+app.post('/api/admin/announce',auth,admin,(req,res)=>{const text=(req.body.text||'').trim();if(!text)return res.status(400).json({error:'Text required'});const users=db.prepare('SELECT id FROM users WHERE banned=0').all();const tx=db.transaction(()=>{for(const u of users)notify(u.id,'announcement',text)});tx();res.json({sent:users.length})});
+
+app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'index.html')));
+app.listen(PORT,()=>console.log(`ZenSocial running on http://localhost:${PORT}`));
