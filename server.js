@@ -9,6 +9,14 @@ import { fileURLToPath } from 'url';
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const app=express();
+
+app.use((req,res,next)=>{
+  res.header('Access-Control-Allow-Origin','*');
+  res.header('Access-Control-Allow-Headers','Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Methods','GET,POST,PUT,DELETE,OPTIONS');
+  if(req.method==='OPTIONS') return res.sendStatus(204);
+  next();
+});
 const PORT=process.env.PORT||3000;
 const JWT_SECRET=process.env.JWT_SECRET||'change-this-secret-in-production';
 const db=new Database(path.join(__dirname,'zensocial.db'));
